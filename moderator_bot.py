@@ -2,20 +2,45 @@
 import json
 import logging
 import os
-from typing import List
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # ---------- CONFIG ----------
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "<PUT_YOUR_TOKEN_HERE>")
-# Replace with your Telegram user ID(s) who may perform global bans:
-ADMINS = {123456789}  # set of ints
-DATA_FILE = "mod_data.json"
+DEFAULT_ADMINS = {123456789}  # set of ints
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.getcwd(), "data"))
+DATA_FILE = os.environ.get("DATA_FILE", os.path.join(DATA_DIR, "mod_data.json"))
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 # ----------------------------
 
-logging.basicConfig(level=logging.INFO)
+os.makedirs(os.path.dirname(DATA_FILE) or ".", exist_ok=True)
+
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 logger = logging.getLogger(__name__)
+
+
+def _parse_admins(value: str | None):
+    if not value:
+        return DEFAULT_ADMINS
+    admins = set()
+    invalid_values = []
+    for part in value.replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            admins.add(int(part))
+        except ValueError:
+            invalid_values.append(part)
+    if invalid_values:
+        logger.warning("Ignoring invalid ADMINS entries: %s", ", ".join(invalid_values))
+    return admins or DEFAULT_ADMINS
+
+
+ADMINS = _parse_admins(os.environ.get("ADMINS"))
+logger.info("Admin IDs configured: %s", sorted(ADMINS))
+logger.info("Persisting moderation data at %s", DATA_FILE)
 
 # persistent storage helpers
 def load_data():
